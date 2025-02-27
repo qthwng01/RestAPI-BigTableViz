@@ -108,32 +108,38 @@ app.get('/api/games/:id', async (req, res) => {
 })
 
 // ============================
-// POST /api/games - Tạo mới một game
+// POST /api/games/ - Tạo game mới
 // ============================
 app.post('/api/games', async (req, res) => {
   try {
-    const { name, genre, platform, rating, release_year, price } = req.body
-    // Kiểm tra các trường bắt buộc, ví dụ: name
+    const { name, genre, platform, rating, release_year, price } = req.body;
+    
+    // Kiểm tra trường bắt buộc
     if (!name) {
-      return res.status(400).json({ error: 'Name is required' })
+      return res.status(400).json({ error: 'Name is required' });
     }
-    const [result] = await pool.query('INSERT INTO games (name, genre, platform, rating, release_year, price) VALUES (?, ?, ?, ?, ?, ?)', [
-      name,
-      genre,
-      platform,
-      rating,
-      release_year,
-      price
-    ])
-    // Lấy game vừa được tạo
-    const insertedId = result.insertId
-    const [newGame] = await pool.query('SELECT * FROM games WHERE id = ?', [insertedId])
-    res.status(201).json(newGame[0])
+    
+    // Kiểm tra xem game có tên trùng nhau không
+    const [existing] = await pool.query('SELECT * FROM games WHERE name = ?', [name]);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Game with this name already exists' });
+    }
+
+    // Thực hiện chèn game mới
+    const [result] = await pool.query(
+      'INSERT INTO games (name, genre, platform, rating, release_year, price) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, genre, platform, rating, release_year, price]
+    );
+    const insertedId = result.insertId;
+
+    // Truy vấn game vừa được thêm
+    const [newGame] = await pool.query('SELECT * FROM games WHERE id = ?', [insertedId]);
+    res.status(201).json(newGame[0]);
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: 'Internal server error' })
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
   }
-})
+});
 
 // ============================
 // PUT /api/games/:id - Cập nhật thông tin game theo ID
