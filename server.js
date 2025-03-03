@@ -112,34 +112,38 @@ app.get('/api/games/:id', async (req, res) => {
 // ============================
 app.post('/api/games', async (req, res) => {
   try {
-    const { name, genre, platform, rating, release_year, price } = req.body;
-    
+    const { name, genre, platform, rating, release_year, price } = req.body
+
     // Kiểm tra trường bắt buộc
     if (!name) {
-      return res.status(400).json({ error: 'Name is required' });
+      return res.status(400).json({ error: 'Name is required' })
     }
-    
+
     // Kiểm tra xem game có tên trùng nhau không
-    const [existing] = await pool.query('SELECT * FROM games WHERE name = ?', [name]);
+    const [existing] = await pool.query('SELECT * FROM games WHERE name = ?', [name])
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Game with this name already exists' });
+      return res.status(400).json({ error: 'Game with this name already exists' })
     }
 
     // Thực hiện chèn game mới
-    const [result] = await pool.query(
-      'INSERT INTO games (name, genre, platform, rating, release_year, price) VALUES (?, ?, ?, ?, ?, ?)',
-      [name, genre, platform, rating, release_year, price]
-    );
-    const insertedId = result.insertId;
+    const [result] = await pool.query('INSERT INTO games (name, genre, platform, rating, release_year, price) VALUES (?, ?, ?, ?, ?, ?)', [
+      name,
+      genre,
+      platform,
+      rating,
+      release_year,
+      price,
+    ])
+    const insertedId = result.insertId
 
     // Truy vấn game vừa được thêm
-    const [newGame] = await pool.query('SELECT * FROM games WHERE id = ?', [insertedId]);
-    res.status(201).json(newGame[0]);
+    const [newGame] = await pool.query('SELECT * FROM games WHERE id = ?', [insertedId])
+    res.status(201).json(newGame[0])
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(err)
+    res.status(500).json({ error: 'Internal server error' })
   }
-});
+})
 
 // ============================
 // PUT /api/games/:id - Cập nhật thông tin game theo ID
@@ -178,14 +182,24 @@ app.put('/api/games/:id', async (req, res) => {
 // ============================
 // DELETE /api/games/:id - Xóa game theo ID
 // ============================
-app.delete('/api/games/:id', async (req, res) => {
+app.delete('/api/games', async (req, res) => {
   try {
-    const { id } = req.params
-    const [result] = await pool.query('DELETE FROM games WHERE id = ?', [id])
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: 'Game not found' })
+    const { ids } = req.body
+
+    // Kiểm tra xem ids có phải là mảng không và không rỗng
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Ids must be a non-empty array' })
     }
-    res.json({ message: 'Game deleted successfully' })
+
+    // Thực hiện xoá các game có id nằm trong mảng ids
+    const [result] = await pool.query('DELETE FROM games WHERE id IN (?)', [ids])
+
+    // Nếu không có bản ghi nào bị xoá, trả về lỗi 404
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'No game found for the provided Ids' })
+    }
+
+    res.json({ message: 'Games deleted successfully', affectedRows: result.affectedRows })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: 'Internal server error' })
