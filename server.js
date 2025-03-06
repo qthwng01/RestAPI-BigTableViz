@@ -13,25 +13,24 @@ app.use(express.json())
 // API lấy danh sách game với tìm kiếm full text, lọc và phân trang kèm thông tin metadata
 app.get('/api/games', async (req, res) => {
   try {
-    // Lấy các query params, nếu không truyền sẽ dùng giá trị mặc định
     const { search, genre, platform, min_rating, max_rating, min_year, max_year, page = 1, limit = 20 } = req.query
 
-    // Chuyển đổi page và limit về số nguyên
     const currentPage = parseInt(page, 10)
-    const perPage = parseInt(limit, 10)
+    let perPage = parseInt(limit, 10)
 
-    // 1. Lấy tổng số items trong bảng (không lọc)
+    // Nếu limit = 0 thì không giới hạn số lượng bản ghi trả về
+    const noLimit = perPage === 0
+
+    // 1. Lấy tổng số game trong database
     const [totalResult] = await pool.query('SELECT COUNT(*) AS total FROM games')
     const totalItems = totalResult[0].total
 
-    // 2. Xây dựng điều kiện lọc dùng chung cho count (sau khi lọc) và truy vấn dữ liệu
+    // 2. Xây dựng điều kiện lọc
     let queryConditions = ''
     const paramsConditions = []
 
-    // Sử dụng full text search nếu có tham số search
     if (search) {
       queryConditions += ' AND MATCH(name) AGAINST(? IN BOOLEAN MODE)'
-      // Sử dụng cú pháp boolean search với dấu + và wildcard *
       paramsConditions.push(`+${search}*`)
     }
     if (genre) {
@@ -59,29 +58,32 @@ app.get('/api/games', async (req, res) => {
       paramsConditions.push(parseInt(max_year, 10))
     }
 
-    // 3. Lấy tổng số items sau khi áp dụng các điều kiện lọc
+    // 3. Đếm số lượng game sau khi lọc
     const filteredCountQuery = `SELECT COUNT(*) AS total FROM games WHERE 1=1 ${queryConditions}`
     const [filteredCountResult] = await pool.query(filteredCountQuery, paramsConditions)
     const filteredTotalItems = filteredCountResult[0].total
 
-    // 4. Tính offset cho phân trang
-    const offset = (currentPage - 1) * perPage
+    // 4. Truy vấn dữ liệu
+    let dataQuery = `SELECT * FROM games WHERE 1=1 ${queryConditions}`
+    const dataParams = [...paramsConditions]
 
-    // 5. Truy vấn dữ liệu game sau khi áp dụng điều kiện lọc và phân trang
-    const dataQuery = `SELECT * FROM games WHERE 1=1 ${queryConditions} LIMIT ? OFFSET ?`
-    const dataParams = [...paramsConditions, perPage, offset]
+    if (!noLimit) {
+      const offset = (currentPage - 1) * perPage
+      dataQuery += ' LIMIT ? OFFSET ?'
+      dataParams.push(perPage, offset)
+    }
+
     const [games] = await pool.query(dataQuery, dataParams)
 
-    // 6. Tính tổng số trang sau khi lọc
-    const totalPages = Math.ceil(filteredTotalItems / perPage)
+    // 5. Tính tổng số trang sau khi lọc (chỉ tính nếu có phân trang)
+    const totalPages = noLimit ? 1 : Math.ceil(filteredTotalItems / perPage)
 
-    // 7. Trả về dữ liệu kèm metadata
     res.json({
-      current_page: currentPage,
-      limit: perPage,
-      total_items: totalItems, // Tổng items trong bảng (không lọc)
-      filtered_items: filteredTotalItems, // Tổng items sau khi lọc
-      total_pages: totalPages, // Tổng số trang sau khi lọc
+      current_page: noLimit ? null : currentPage,
+      limit: noLimit ? null : perPage,
+      total_items: totalItems,
+      filtered_items: filteredTotalItems,
+      total_pages: noLimit ? null : totalPages,
       data: games,
     })
   } catch (err) {
