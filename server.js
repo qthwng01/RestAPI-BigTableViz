@@ -1,5 +1,6 @@
 require('dotenv').config()
 const express = require('express')
+const ExcelJS = require('exceljs')
 const cors = require('cors')
 const pool = require('./database')
 
@@ -204,6 +205,54 @@ app.delete('/api/games', async (req, res) => {
     res.json({ message: 'Games deleted successfully', affectedRows: result.affectedRows })
   } catch (err) {
     console.error(err)
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
+// API export game sang file Excel
+app.get('/api/games/export/excel', async (req, res) => {
+  try {
+    // Nếu cần lọc, bạn có thể áp dụng các điều kiện tương tự như API GET /api/games.
+    // Ở đây, ví dụ lấy tất cả game:
+    const [games] = await pool.query('SELECT * FROM games')
+
+    // Tạo workbook và worksheet
+    const workbook = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('Games')
+
+    // Định nghĩa header cho worksheet
+    worksheet.columns = [
+      { header: 'ID', key: 'id', width: 10 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Genre', key: 'genre', width: 20 },
+      { header: 'Platform', key: 'platform', width: 20 },
+      { header: 'Rating', key: 'rating', width: 10 },
+      { header: 'Release Year', key: 'release_year', width: 15 },
+      { header: 'Description', key: 'description', width: 50 },
+    ]
+
+    // Thêm dữ liệu game vào worksheet
+    games.forEach((game) => {
+      worksheet.addRow({
+        id: game.id,
+        name: game.name,
+        genre: game.genre,
+        platform: game.platform,
+        rating: game.rating,
+        release_year: game.release_year,
+        description: game.description,
+      })
+    })
+
+    // Thiết lập header cho response để tải file Excel
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename=games.xlsx')
+
+    // Ghi workbook xuống response
+    await workbook.xlsx.write(res)
+    res.end()
+  } catch (error) {
+    console.error(error)
     res.status(500).json({ error: 'Internal server error' })
   }
 })
