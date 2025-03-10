@@ -118,3 +118,4 @@ coverage
 .env.production
 license.txt
 exports
+server_backup.js
