@@ -129,7 +129,9 @@ app.get('/api/auth/checkAuth', authenticateToken, (req, res) => {
 // API refresh: sử dụng session id để cấp access token mới
 app.post('/api/auth/refresh', (req, res) => {
   const { sessionId } = req.body
-  if (!sessionId) return res.status(401).json({ error: 'Session ID missing' })
+  if (!sessionId) {
+    return res.status(401).json({ error: 'Session ID missing' })
+  }
 
   const refreshToken = sessionStore[sessionId]
   if (!refreshToken) {
@@ -137,15 +139,31 @@ app.post('/api/auth/refresh', (req, res) => {
   }
 
   jwt.verify(refreshToken, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid refresh token' })
+    if (err) {
+      // Nếu token hết hạn, trả về 401 Unauthorized
+      if (err.name === 'TokenExpiredError') {
+        return res.status(401).json({
+          error: 'invalid_grant',
+          error_description: 'Refresh token has expired'
+        })
+      }
+      // Các lỗi khác cũng trả về 403 Forbidden
+      return res.status(403).json({ error: 'Invalid refresh token' })
+    }
 
     if (user.tokenType !== 'refresh') {
       return res.status(403).json({ error: 'Invalid token type' })
     }
 
-    const accessPayload = { id: user.id, username: user.username, tokenType: 'access' }
+    const accessPayload = {
+      id: user.id,
+      username: user.username,
+      tokenType: 'access'
+    }
     const accessTokenExpiry = process.env.JWT_EXPIRATION || '1h'
-    const newAccessToken = jwt.sign(accessPayload, process.env.JWT_SECRET, { expiresIn: accessTokenExpiry })
+    const newAccessToken = jwt.sign(accessPayload, process.env.JWT_SECRET, {
+      expiresIn: accessTokenExpiry
+    })
     res.json({ accessToken: newAccessToken })
   })
 })
